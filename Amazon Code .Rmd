@@ -1,0 +1,421 @@
+---
+title: "Moduls"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## by Atajan Arashev
+
+---
+title: "Modules"
+output: github_document
+
+---
+#KARKAVELRAJA J. (Updated a Year Ago). Amazon Sales Dataset, Version 1.0. Retrieved [Date Retrieved] from https://www.kaggle.com/datasets/karkavelrajaj/amazon-sales-dataset.
+
+```{r setup2}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(mclust)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tm)         
+library(sentimentr) 
+library(wordcloud)
+library(cluster)  
+library(RColorBrewer)
+library(dplyr)
+
+```
+
+
+
+
+```{r summary}
+
+
+# Reading and Initial Inspection of the Data
+amazon_data <- read.csv("amazon.csv", stringsAsFactors = FALSE)
+str(amazon_data)
+head(amazon_data)
+summary(amazon_data)
+column_names <- names(amazon_data)
+print(column_names)
+
+
+
+```
+
+### Visualization: Log-Transformed Discounted Price Distribution
+```{r Price Distribution}
+### Visualization: Log-Transformed Discounted Price Distribution
+
+library(ggplot2)
+
+# Check for missing values
+print(sum(is.na(amazon_data)))
+
+# Data Cleaning
+amazon_data$discounted_price <- as.numeric(gsub("₹|,", "", amazon_data$discounted_price))
+amazon_data$actual_price <- as.numeric(gsub("₹|,", "", amazon_data$actual_price))
+
+# Convert the columns to numeric type
+amazon_data$discounted_price <- as.numeric(amazon_data$discounted_price)
+amazon_data$actual_price <- as.numeric(amazon_data$actual_price)
+
+
+
+
+# Visualization: Log-Transformed Discounted Price Distribution
+amazon_data$discounted_price_log <- log1p(amazon_data$discounted_price)
+ggplot(amazon_data, aes(x = discounted_price_log)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(title = "Log-Transformed Discounted Price Distribution",
+       x = "Log-Transformed Discounted Price", y = "Count") +
+  theme_minimal()
+
+
+
+
+
+
+
+
+```
+
+### Categorical Data Analysis
+
+
+
+### Rating Analysis
+```{r Rating Analysis}
+library(dplyr)
+library(ggplot2)
+# Convert the 'rating' column to numeric, coercing any non-numeric values to NA
+amazon_data$rating <- as.numeric(as.character(amazon_data$rating))
+# Impute NAs with the median rating
+median_rating <- median(amazon_data$rating, na.rm = TRUE)
+amazon_data$rating[is.na(amazon_data$rating)] <- median_rating
+# Enhanced Violin Plot for Rating Analysis
+ggplot(amazon_data, aes(x = factor(0), y = rating)) +
+  geom_violin(trim = FALSE, fill = "#00A08A") +
+  geom_jitter(width = 0.1, color = "darkgray", alpha = 0.5) +
+  scale_y_continuous(limits = c(1, 5)) +  # Set limits assuming ratings are between 1 and 5
+  labs(title = "Distribution of Product Ratings on Amazon", x = "", y = "Rating") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+```
+
+
+
+### Relationship Between Ratings and Prices
+
+
+```{r Rating Discount}
+# Enhanced scatter plot with improved visualization
+ggplot(amazon_data, aes(x = rating, y = discounted_price)) +
+  geom_point(alpha = 0.2, size = 2, aes(color = discounted_price)) +  # Adjust alpha and size, add color scale
+  scale_color_gradient(low = "blue", high = "red") +  # Gradient color from low to high price
+  geom_smooth(method = "lm", color = "black", se = FALSE) +  # Change color for better contrast
+  scale_y_log10(labels = scales::comma) +  # Log-transform y-axis
+  labs(
+    title = "Relationship Between Ratings and Discounted Price",
+    subtitle = "Data points are colored from low (blue) to high (red) prices.",
+    x = "Rating",
+    y = "Discounted Price (log scale)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",  # Hide legend if color is not meaningful
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),  # Center and bold title
+    plot.subtitle = element_text(hjust = 0.5, size = 10),  # Center subtitle
+    axis.text = element_text(size = 12),  # Adjust axis text size
+    axis.title = element_text(size = 12)  # Adjust axis title size
+  )
+#The graph seems to suggest that product price does not necessarily increase with higher ratings. Products with high ratings can have a wide range of prices, and similarly, lower-rated products also span a broad range of prices. The log scale on the y-axis helps to visualize the full range of prices without letting the highest prices dominate the graph's visual space.
+
+```
+```{r category_count}
+
+
+
+# Display the plot
+ggsave("category_count_plot.png", width = 12, height = 8, dpi = 300)
+
+
+
+# Perform the data manipulation and create the plot
+category_count <- amazon_data %>%
+  group_by(category) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count))
+
+ggplot(category_count, aes(x = reorder(category, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "#0073C2FF") +
+  theme_minimal() +
+  labs(title = "Product Count by Category in Amazon Listings",
+       x = "Category",
+       y = "Product Count") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1, size = 12),
+        axis.title = element_text(size = 14),
+        title = element_text(size = 16)) +
+  theme(legend.position = "none")
+
+
+
+
+
+
+```
+
+```{r ANOVA}
+
+# You've already read the data
+amazon_data <- read.csv("amazon.csv", stringsAsFactors = FALSE)
+# Convert 'rating' to numeric, handling non-numeric values
+amazon_data$rating <- as.numeric(as.character(amazon_data$rating))
+# Check for and handle NA values
+sum(is.na(amazon_data$rating))  # Check how many NAs are there
+amazon_data <- na.omit(amazon_data)  # Remove rows with NAs
+# Perform ANOVA test
+# Ensure that 'category' is a factor if it's not
+amazon_data$category <- as.factor(amazon_data$category)
+
+anova_result <- aov(rating ~ category, data = amazon_data)
+summary(anova_result)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+### Linear Regression Model
+```{r LR Model}
+# Set the working directory (this line is optional if you've already set the working directory in R)
+
+
+# Load necessary libraries
+library(dplyr)
+
+# Read the data
+amazon_data <- read.csv('amazon.csv', stringsAsFactors = FALSE)
+
+# Data cleaning steps
+amazon_data$discounted_price <- as.numeric(gsub("₹|,", "", amazon_data$discounted_price))
+amazon_data$rating <- as.numeric(as.character(amazon_data$rating))
+
+# Drop rows with NA values in 'rating' or 'discounted_price'
+amazon_data <- na.omit(amazon_data)
+
+# Extract the main category from the 'category' column
+amazon_data$category_main <- sapply(strsplit(amazon_data$category, split = "\\|"), `[`, 1)
+
+# Convert 'category_main' to a factor
+amazon_data$category_main <- as.factor(amazon_data$category_main)
+
+# Ensure there are at least two levels in 'category_main'
+if (length(levels(amazon_data$category_main)) < 2) {
+  stop("Not enough levels in 'category_main' to fit the model.")
+}
+
+# Fit the linear regression model
+lm_model <- lm(discounted_price ~ rating + category_main, data = amazon_data)
+
+# Print the summary of the linear model
+summary(lm_model)
+
+
+```
+
+# # Word Cloud Generation
+```{r Word Cloud}
+library(wordcloud)
+library(tm)
+
+# Text Preprocessing
+corpus <- Corpus(VectorSource(amazon_data$about_product))
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("en"))
+corpus <- tm_map(corpus, stripWhitespace)
+
+# Create a term-document matrix
+dtm <- TermDocumentMatrix(corpus)
+
+# Calculate word frequencies
+word_freqs <- sort(rowSums(as.matrix(dtm)), decreasing = TRUE)
+word_freqs_df <- data.frame(word = names(word_freqs), freq = word_freqs)
+
+# Create the word cloud
+set.seed(1234)
+wordcloud(words = word_freqs_df$word, freq = word_freqs_df$freq, min.freq = 1,
+          max.words = 100, random.order = FALSE, rot.per = 0.25,
+          colors = brewer.pal(8, "Dark2"))
+
+```
+#### K-means Clustering rating discount_price
+```{r  K-means}
+
+# Clustering Analysis
+# Preparing Data for Clustering
+clustering_data <- na.omit(amazon_data[, c('rating', 'discounted_price')])
+clustering_data <- scale(clustering_data)
+
+
+# K-means Clustering
+set.seed(123)
+kmeans_result <- kmeans(clustering_data, centers = 3)
+print(kmeans_result$centers)
+```
+#KMEANS SAMPLE SIZES
+```{r SAMPLE SIZES}
+
+print(kmeans_result$size )
+```
+
+###Optimal Cluster Count Determination via Silhouette Analysis
+```{r Silhouette}
+clustering_data <- na.omit(amazon_data[, c('rating', 'discounted_price')])
+clustering_data <- scale(clustering_data)
+
+
+# K-means Clustering
+set.seed(123)
+kmeans_result <- kmeans(clustering_data, centers = 3)
+print(kmeans_result$centers)
+
+# Calculate silhouette scores for different numbers of clusters
+silhouette_scores <- sapply(2:10, function(k) {
+  km.res <- kmeans(clustering_data, centers = k, nstart = 25)
+  # You need a distance matrix for the silhouette function
+  diss <- dist(clustering_data)
+  silhouette_score <- silhouette(km.res$cluster, diss)
+  mean(silhouette_score[, "sil_width"])
+})
+
+# Print the silhouette scores
+print(silhouette_scores)
+
+library(ggplot2)
+
+# Assuming silhouette_scores has been correctly computed as shown in your script
+silhouette_df <- data.frame(
+  k = 2:10,
+  silhouette_score = silhouette_scores
+)
+
+# Plotting the silhouette scores
+ggplot(silhouette_df, aes(x = k, y = silhouette_score)) +
+  geom_line(color = "blue", size = 1) +  # Set line color and size
+  geom_point(color = "red", size = 3) +  # Set point color and size
+  labs(title = "Average Silhouette Score for Different Numbers of Clusters",
+       x = "Number of Clusters", y = "Average Silhouette Score") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylim(c(-1, 1))  # Set y-axis limits
+
+
+
+
+```
+
+
+###GMM
+```{r GMM}
+clustering_data <- na.omit(amazon_data[, c('rating', 'discounted_price')])
+clustering_data <- scale(clustering_data)
+
+# Set a more reasonable range for the number of clusters
+G_range <- 1:10
+
+# Calculate BIC for a range of number of clusters and plot
+BIC_values <- mclustBIC(clustering_data, G = G_range)
+plot(BIC_values, what = "BIC")
+
+# Select the number of clusters with the best BIC value within the range
+optimal_model <- which.max(BIC_values)
+
+# Fit the GMM model with the selected number of clusters
+gmm_model <- Mclust(clustering_data, G = optimal_model)
+
+# Summary of the GMM model
+summary(gmm_model)
+
+```
+
+
+###GMM and 2D Scatter Plot of GMM Clusters
+```{r GMM2D}
+
+clustering_data <- na.omit(amazon_data[, c('rating', 'discounted_price')])
+clustering_data <- scale(clustering_data)
+
+# Set a more reasonable range for the number of clusters
+G_range <- 1:10
+
+# Calculate BIC for a range of number of clusters and plot
+BIC_values <- mclustBIC(clustering_data, G = G_range)
+plot(BIC_values, what = "BIC")
+
+# Select the number of clusters with the best BIC value within the range
+optimal_model <- which.max(BIC_values)
+
+# Fit the GMM model with the selected number of clusters
+gmm_model <- Mclust(clustering_data, G = optimal_model)
+
+# Summary of the GMM model
+summary(gmm_model)
+
+# Visualize the classification from GMM
+plot(gmm_model, what = "classification")
+# Load the necessary libraries
+library(ggplot2)
+
+# Assuming 'gmm_model' is your fitted Gaussian Mixture Model object and 'clustering_data' is your data
+clusters <- gmm_model$classification
+num_clusters <- max(clusters)
+
+# Convert the scaled matrix to a data frame and set column names
+clustering_data_df <- as.data.frame(clustering_data)
+colnames(clustering_data_df) <- c('rating', 'discounted_price')
+
+# Generate a set of distinct colors, one for each cluster
+colors <- grDevices::rainbow(num_clusters)
+
+# Now use this data frame and custom color set for the ggplot2 call
+plot_gmm_2d <- ggplot(clustering_data_df, aes(x = rating, y = discounted_price, color = as.factor(clusters))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "2D Scatter Plot of GMM Clusters",
+       x = "Scaled Rating",
+       y = "Scaled Discounted Price") +
+  theme_minimal() +
+  scale_color_manual(values = colors) +
+  theme(legend.title = element_blank())
+
+# Display the 2D scatter plot
+print(plot_gmm_2d)
+
+
+```
+
+
+
+
+
